@@ -43,14 +43,19 @@ class ScaledPotential():
         else:
             return val+self.j*(self.j+1.0)/r**2
 
+class morse_potential():
+    def __init__(self,d,a,re):
+        self.d=d
+        self.re=re
+        self.a=a
+    def v(self,r):
+        return -self.d+self.d*(1-math.exp(-self.a*(r-self.re)))**2
+
 def integrate(energy, potential, rstart, rstep, max_points):
     """
     rstep < 0.0 specified inwards integration with special stopping criteria
     """
-
-    h2=rstep*rstep
-
-    
+    h2=rstep*rstep    
     rcurrent=rstart
     rnext=rstart+rstep
     if rstep < 0: 
@@ -86,6 +91,7 @@ def rescale(psi, factor):
 
 def update_energy(potential, energy, rmin, rmax, npoints):
     h=(rmax-rmin)/(npoints-1)
+    h2=h**2
 
     # integrate in:
     psi_inwards=integrate(energy, potential, rmax, -h, npoints)
@@ -99,11 +105,6 @@ def update_energy(potential, energy, rmin, rmax, npoints):
     # splice two solutions together:
     psi=psi_outwards[:-1]+psi_inwards[::-1]
 
-    f=open("test_wavefunction.dat","w")
-    for i,apsi in enumerate(psi):
-        f.write("%f %f\n" % (rmin+i*h,apsi))
-    f.close()
-
     # calculate correction to energy, based on discontinuity at meeting point 
     # (A4 of Cashion):
     sum_psi2=0.0
@@ -114,7 +115,6 @@ def update_energy(potential, energy, rmin, rmax, npoints):
     rinner=rm-h
     router=rm+h
 
-    h2=h**2
     yinner=psi[m_index-1]*(1-h2/12.0*(potential(rinner)-energy))
     ym=psi[m_index]*(1-h2/12.0*(potential(rm)-energy))
     youter=psi[m_index+1]*(1-h2/12.0*(potential(router)-energy))
@@ -126,114 +126,36 @@ def update_energy(potential, energy, rmin, rmax, npoints):
     new_energy=energy+energy_correction
     return new_energy, psi
 
-def driver(potential, energy_guess, rmin, rmax, npoints, corr_fact):
-    max_iterations=10
-    tolerance=1.0e-9
+def driver(potential, energy_guess, rmin, rmax, npoints, corr_fact, 
+           tolerance=1.0e-9,
+           max_iterations=100,
+           diagnostics=False):
     count=0
     energies=[energy_guess,]
+    h=(rmax-rmin)/(npoints-1)
+    success_code=0
     while count < max_iterations:
         count += 1
         print "Trying energy: ", energies[-1]*corr_fact
         new_energy, psi = update_energy(potential, energies[-1], 
                                         rmin, rmax, npoints)
+        if diagnostics:
+            print "Tried energy: ", energies[-1]
+            f=open("diagnostic_wavefunction.dat","w")
+            for i,apsi in enumerate(psi):
+                f.write("%f %f\n" % (rmin+i*h,apsi))
+            f.close()
+
         energies.append(new_energy)
-        if abs(energies[-1]-energies[-2]) < tolerance:
+        if ((abs(energies[-1]-energies[-2]) <= tolerance) and
+            ((abs(energies[-2]-energies[-3]) <= tolerance))):
             success_code=1
             break
-    else: # failure, the "while" loop condition was no longer satisfied:
-        success_code=0
-        print "Failure."
-        return success_code
-    return success_code
+    if success_code==1:
+        return {"success_code":success_code,
+                "energy":energies[-2], # this is energy corresponding to psi
+                                       # not the most recent
+                "psi":psi}
+    else:
+        return {"success_code":success_code}
     
-class morse_potential():
-    def __init__(self,d,a,re):
-        self.d=d
-        self.re=re
-        self.a=a
-    def v(self,r):
-        return -self.d+self.d*(1-math.exp(-self.a*(r-self.re)))**2
-
-import unittest
-
-class Test_cashion_compare(unittest.TestCase):
-    def test(self):
-        d=605.559
-        a=0.988879
-        re=2.40873
-        test_potential=morse_potential(d,a,re)
-        guess=-530.0
-        npoints=1000
-        rmax=10.0
-        rmin=re-2
-
-        driver(test_potential.v,
-               guess,
-               rmin,
-               rmax,
-               npoints,
-               1.0)
-
-class Test_cooley_compare(unittest.TestCase):
-    def test(self):
-        kg_per_amu=1.660538921e-27
-        kg_per_atomic_unit=9.10938291e-31
-        reduced_mass_amu=0.5
-        # goofy scaling that Cooley uses:
-        corr_fact=2.0*reduced_mass_amu*kg_per_amu/kg_per_atomic_unit
-        # Cooley's Morse parameters:
-        d=188.4355/corr_fact
-        a=0.711248
-        re=1.9975
-        test_potential=morse_potential(d,a,re)
-        test_scaled_potential=ScaledPotential(test_potential.v,
-                                              "AU",
-                                              "AU",
-                                              reduced_mass_amu,
-                                              "AMU",
-                                              0)
-        guess=-110.8/corr_fact/test_scaled_potential.hbar2_div_2m_in_user_units
-        npoints=200
-        rmax=10.0
-        rmin=0.000
-
-        driver(test_scaled_potential.scaled_v,
-               guess,
-               rmin,
-               rmax,
-               npoints,
-               (corr_fact*test_scaled_potential.hbar2_div_2m_in_user_units)
-           )
-
-class test_he2(unittest.TestCase):
-    def test(self):
-        import sys
-        sys.path.append("../../helium_dimer")
-        import he2_potential_energy
-        reduced_mass_amu=0.5*4.002602
-        test_scaled_potential=ScaledPotential(
-            he2_potential_energy.he2_potential_energy,
-            "nm",
-            "K",
-            reduced_mass_amu,
-            "AMU",
-            0)
-        guess=-0.001/test_scaled_potential.hbar2_div_2m_in_user_units
-        print guess
-        npoints=10000
-        rmax=100.0
-        rmin=0.01
-
-        driver(test_scaled_potential.scaled_v,
-               guess,
-               rmin,
-               rmax,
-               npoints,
-               test_scaled_potential.hbar2_div_2m_in_user_units
-           )
-    
-
-if __name__ == "__main__":
-    # to run a specific test from the command-line:
-    #   python cooley.py test_he2.test
-    unittest.main()
