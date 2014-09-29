@@ -1,7 +1,10 @@
-"""Implementation of Cooley-Cashion technique for solving for vibrational
-energy levels of a diatomic molecule.
+"""Implementation of Cooley-Cashion technique for solving for the vibrational
+energy levels and wavefunctions of a diatomic molecule.
 
-See Cashion: http://dx.doi.org/10.1063/1.1734545
+See: J. K. Cashion, J. Chem. Phys. 39, 1872 (1963),
+http://dx.doi.org/10.1063/1.1734545 (and references within).
+
+XX Much more documentation is required on arguments and return values.
 """
 
 import math
@@ -9,7 +12,7 @@ import math
 class ScaledPotential():
     # helper class to take a potential function and generate scaled
     # version of it suitable for Numerov integration.
-    # possibly allow addition of centrigual term
+    # Allows for addition of centrifugal term.
     def __init__(self, potential_function, 
                  potential_distance_units,
                  potential_energy_units,
@@ -52,8 +55,25 @@ class morse_potential():
         return -self.d+self.d*(1-math.exp(-self.a*(r-self.re)))**2
 
 def integrate(energy, potential, rstart, rstep, max_points):
-    """
-    rstep < 0.0 specified inwards integration with special stopping criteria
+    """Perform either an ingoing or outgoing integration (depending
+    on sign of "rstep") of the 1d Schrodinger equation using Numerov's
+    method (as described by Cashion).  The wavefunction returned
+    is *not normalized*, and should be normalized by the user as required.
+
+    This function can be used to: 
+    1) compute continuum wavefunctions (in which case it will be called once)
+    or 
+    2) used as part of an iterative procedure to compute a bound state
+       energy eigenvalue.  In this case it will be called twice for
+       each trial energy: once for an inwards integration and once 
+       for an outwards integration.
+    In case 1) this function may be called directly by the user, but
+    in case 2) it will normally be called by one of the driver functions of
+    this package.
+
+    Note that the inwards integration has a special termination critera,
+    whereas the outwards integration stopping point is specified by
+    "max_points".
     """
     h2=rstep*rstep    
     rcurrent=rstart
@@ -81,6 +101,7 @@ def integrate(energy, potential, rstart, rstep, max_points):
             if ynew < ycurrent: # inwards integration stopping criteria
                 break
                 # XX this may never be satisfied if energy is too low
+                # maybe check number of points.
         if abs(psi[-1]) > 1.0e6: # rescale to prevent overflow:
             rescale(psi, abs(psi[-1]))
     return psi
@@ -90,6 +111,10 @@ def rescale(psi, factor):
         psi[i]=psival/factor
 
 def update_energy(potential, energy, rmin, rmax, npoints):
+    """Perform a single iteration of energy updating technique described
+    by Cashion.  This function will normally not be called directly
+    by the user."""
+
     h=(rmax-rmin)/(npoints-1)
     h2=h**2
 
@@ -130,17 +155,23 @@ def driver(potential, energy_guess, rmin, rmax, npoints, corr_fact,
            tolerance=1.0e-9,
            max_iterations=100,
            diagnostics=False):
+    """Iterative procedure to find energy eigenvalue.
+    For many cases this will be the only function directly called by
+    the user.
+
+    The wavefunction returned is *not normalized*.
+    """
+
     count=0
     energies=[energy_guess,]
     h=(rmax-rmin)/(npoints-1)
     success_code=0
     while count < max_iterations:
         count += 1
-        print "Trying energy: ", energies[-1]*corr_fact
         new_energy, psi = update_energy(potential, energies[-1], 
                                         rmin, rmax, npoints)
         if diagnostics:
-            print "Tried energy: ", energies[-1]
+            print "Tried energy: ", energies[-1]*corr_fact
             f=open("diagnostic_wavefunction.dat","w")
             for i,apsi in enumerate(psi):
                 f.write("%f %f\n" % (rmin+i*h,apsi))
@@ -158,4 +189,3 @@ def driver(potential, energy_guess, rmin, rmax, npoints, corr_fact,
                 "psi":psi}
     else:
         return {"success_code":success_code}
-    
