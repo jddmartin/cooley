@@ -1,36 +1,68 @@
-"""Implementation of Cooley-Cashion technique for solving for the vibrational
-energy levels and wavefunctions of a diatomic molecule.
+"""A Python implementation of the Cooley technique for solving for the 
+vibrational energy levels and wavefunctions of a diatomic molecule.
 
-See: J. K. Cashion, J. Chem. Phys. 39, 1872 (1963),
+For a description of the techniques see:
+J. K. Cashion, J. Chem. Phys. 39, 1872 (1963),
 http://dx.doi.org/10.1063/1.1734545 (and references within).
 
-XX Much more documentation is required on arguments and return values.
+For examples and tests see the "examples_and_tests" subdirectory.
+
+This is written for readability and simplicity, not efficiency.
+
+Written by J. Martin, Fall 2014, GPLv3.
 """
 
 import math
 
 class ScaledPotential():
-    # helper class to take a potential function and generate scaled
-    # version of it suitable for Numerov integration.
-    # Allows for addition of centrifugal term.
+    """Helper class for generating objects describing potential and units
+    for potential in a form that the integration functions of this module
+    can use.
+
+    The integration functions of this module take an object with the
+    member function ".v(r)" and attribute ".hbar2_div_2m".  Given
+    a potential function accepting distance and return energy in user 
+    specified units, together with the reduced mass of the system, 
+    this class allows easy generation of the required object, including
+    the possibility of rotation.  
+    """
+
     def __init__(self, potential_function, 
                  potential_distance_units,
                  potential_energy_units,
                  reduced_mass, 
                  reduced_mass_units,
                  j):
+        """Arguments:
+             potential_function:  a function of a single variable representing
+                                  internuclear separation that
+                                  returns the value of the potential at that
+                                  separation.
+             potential_distance_units: string representing distance units
+                                       used in "potential_function".
+                                       e.g. "nm", "m"
+             potential_energy_units: string representing energy units
+                                     returned by "potential_function".
+             reduced_mass: reduced mass in units to be specified by:
+             reduced_mass_units: units used to specify reduced mass.
+                                 e.g. "AU" (atomic units)
+                                      "AMU" (atomic mass units).
+        """
         energy_units_in_joules={"eV":1.602176565e-19,
                                 "cm^{-1}":1.986445685e-23,    
                                 "K":1.3806488e-23,            
-                                "AU": 4.35974434e-18,}        
+                                "AU": 4.35974434e-18,
+                                "J":1.0}        
         distance_units_in_meters={"A":1.0e-10,      
-                                  "nm":1.0e-9,                
+                                  "nm":1.0e-9,       
+                                  "m":1.0,         
                                   "AU":0.52917721092e-10,}    
         mass_units_in_kilograms={"AMU":1.660538921e-27,
-                                 "AU":9.10938291e-31,}   
+                                 "AU":9.10938291e-31,
+                                 "kg":1.0,}   
         hbar=1.054571726e-34 # J s
         
-        self.hbar2_div_2m_in_user_units=(
+        self.hbar2_div_2m=(
             hbar**2/(mass_units_in_kilograms[reduced_mass_units]
                      *reduced_mass)/2.0
             /energy_units_in_joules[potential_energy_units]
@@ -39,27 +71,40 @@ class ScaledPotential():
         self.potential_function=potential_function
         self.j=j
 
-    def scaled_v(self,r):
-        val=self.potential_function(r) / self.hbar2_div_2m_in_user_units
+    def v(self,r):
+        val=self.potential_function(r)
         if self.j == 0:
             return val
         else:
-            return val+self.j*(self.j+1.0)/r**2
+            return (val
+                    +self.hbar2_div_2m*self.j*(self.j+1.0)/r**2)
 
-class morse_potential():
-    def __init__(self,d,a,re):
-        self.d=d
-        self.re=re
-        self.a=a
-    def v(self,r):
-        return -self.d+self.d*(1-math.exp(-self.a*(r-self.re)))**2
-
-def integrate(energy, potential, rstart, rstep, max_points):
+def integrate(Potential, energy, rstart, rstep, max_points):
     """Perform either an ingoing or outgoing integration (depending
     on sign of "rstep") of the 1d Schrodinger equation using Numerov's
     method (as described by Cashion).  The wavefunction returned
     is *not normalized*, and should be normalized by the user as required.
 
+    Arguments:
+      Potential: a class with a member function:   ".v(r)" 
+                 and the attribute:                ".hbar2_div_2m" 
+                 The member function ".v(r)" should return the value of
+                 the potential energy as a function of internuclear distance.
+                 The attribute ".hbar2_div_2m" should return hbar^2/(2m) 
+                 using the same energy and distance units that ".v(r)" uses
+                 for its return value and argument respectively.
+      rstart: starting point for integration 
+              (in same distance units as argument of "Potential.v(r)")
+      rstep: increment for integration; positive for outgoing integration, 
+             negative for ingoing integration.
+      max_points: maximum number of points to integrate.
+    Returns: a list with the wavefunction.  Note that the first element
+             corresponds to rstart, and subsequent elements correspond
+             to rstart+rstep, rstart+2.0*rstep, etc...
+             i.e. for inwards integration (rstep < 0.0), the wavefunction will
+             be listed in order of descending r.
+
+    Notes:
     This function can be used to: 
     1) compute continuum wavefunctions (in which case it will be called once)
     or 
@@ -68,13 +113,14 @@ def integrate(energy, potential, rstart, rstep, max_points):
        each trial energy: once for an inwards integration and once 
        for an outwards integration.
     In case 1) this function may be called directly by the user, but
-    in case 2) it will normally be called by one of the driver functions of
-    this package.
+    in case 2) it will normally be called by a driver function which
+    takes care of matching inwards and outwards integrations and determining
+    a new energy eigenvalue.
 
-    Note that the inwards integration has a special termination critera,
-    whereas the outwards integration stopping point is specified by
-    "max_points".
+    See module docstring for reference.
     """
+
+    hbar2_div_2m=Potential.hbar2_div_2m
     h2=rstep*rstep    
     rcurrent=rstart
     rnext=rstart+rstep
@@ -82,8 +128,10 @@ def integrate(energy, potential, rstart, rstep, max_points):
         # start inwards integration based on WKB (A3 of Cashion):
         psi=[1.0e-6,]
         psi.append(psi[0]
-                   /math.exp(rnext*math.sqrt(potential(rnext)-energy)-
-                             rcurrent*math.sqrt(potential(rcurrent)-energy)))
+                   /math.exp(rnext*math.sqrt(Potential.v(rnext)-energy)
+                             /hbar2_div_2m-
+                             rcurrent*math.sqrt(Potential.v(rcurrent)-energy)
+                             /hbar2_div_2m))
     else:
         # start outwards integration as recommended by Cashion:
         psi=[0,1.0e-6]
@@ -93,10 +141,11 @@ def integrate(energy, potential, rstart, rstep, max_points):
         rcurrent=rnext
         rnext=rstart+rstep*i
 
-        yprev=(1.0-h2/12.0*(potential(rprev)-energy))*psi[-2]
-        ycurrent=(1.0-h2/12.0*(potential(rcurrent)-energy))*psi[-1]
-        ynew=2.0*ycurrent-yprev+h2*(potential(rcurrent)-energy)*psi[-1]
-        psi.append(ynew/(1.0-h2/12.0*(potential(rnext)-energy)))
+        yprev=(1.0-h2/12.0*(Potential.v(rprev)-energy)/hbar2_div_2m)*psi[-2]
+        ycurrent=(1.0-h2/12.0*(Potential.v(rcurrent)-energy)/hbar2_div_2m)*psi[-1]
+        ynew=(2.0*ycurrent-yprev+h2*(Potential.v(rcurrent)-energy)
+              /hbar2_div_2m*psi[-1])
+        psi.append(ynew/(1.0-h2/12.0*(Potential.v(rnext)-energy)/hbar2_div_2m))
         if rstep < 0.0: # inwards integration
             if ynew < ycurrent: # inwards integration stopping criteria
                 break
@@ -110,21 +159,28 @@ def rescale(psi, factor):
     for i, psival in enumerate(psi):
         psi[i]=psival/factor
 
-def update_energy(potential, energy, rmin, rmax, npoints):
+def update_energy(Potential, energy, rmin, rmax, npoints):
     """Perform a single iteration of energy updating technique described
-    by Cashion.  This function will normally not be called directly
-    by the user."""
+    by Cashion (originally due to Cooley).
+    This function will normally not be called directly by the user.
 
+    For a description of arguments see "integrate".  Returns the updated
+    energy (in energy units of "Potential.v(r)").
+
+    See module docstring for reference.
+    """
+
+    hbar2_div_2m=Potential.hbar2_div_2m
     h=(rmax-rmin)/(npoints-1)
     h2=h**2
 
     # integrate in:
-    psi_inwards=integrate(energy, potential, rmax, -h, npoints)
+    psi_inwards=integrate(Potential, energy, rmax, -h, npoints)
     rescale(psi_inwards,psi_inwards[-1])
     m_index=npoints-len(psi_inwards)
 
     # integrate out:
-    psi_outwards=integrate(energy, potential, rmin, h, m_index+1)
+    psi_outwards=integrate(Potential, energy, rmin, h, m_index+1)
     rescale(psi_outwards,psi_outwards[-1])
 
     # splice two solutions together:
@@ -140,18 +196,21 @@ def update_energy(potential, energy, rmin, rmax, npoints):
     rinner=rm-h
     router=rm+h
 
-    yinner=psi[m_index-1]*(1-h2/12.0*(potential(rinner)-energy))
-    ym=psi[m_index]*(1-h2/12.0*(potential(rm)-energy))
-    youter=psi[m_index+1]*(1-h2/12.0*(potential(router)-energy))
+    yinner=psi[m_index-1]*(1-h2/12.0*(Potential.v(rinner)-energy)/hbar2_div_2m)
+    ym=psi[m_index]*(1-h2/12.0*(Potential.v(rm)-energy)/hbar2_div_2m)
+    youter=psi[m_index+1]*(1-h2/12.0*(Potential.v(router)-energy)/hbar2_div_2m)
     
-    energy_correction=(((-yinner+2.0*ym-youter)/h2
-                        +(potential(rm)-energy)*psi[m_index])
-                       /sum_psi2)
+    energy_correction=hbar2_div_2m*(((-yinner+2.0*ym-youter)/h2
+                                     +(Potential.v(rm)-energy)
+                                     /hbar2_div_2m*psi[m_index])
+                                    /sum_psi2)
 
     new_energy=energy+energy_correction
     return new_energy, psi
 
-def driver(potential, energy_guess, rmin, rmax, npoints, corr_fact, 
+def driver(Potential, 
+           energy_guess, 
+           rmin, rmax, npoints, 
            tolerance=1.0e-9,
            max_iterations=100,
            diagnostics=False):
@@ -159,7 +218,15 @@ def driver(potential, energy_guess, rmin, rmax, npoints, corr_fact,
     For many cases this will be the only function directly called by
     the user.
 
-    The wavefunction returned is *not normalized*.
+    Arguments:
+
+    Returns:
+    A dictionary with various results of the calculation indexed by keys.
+    The most important corresponds is the "success_code" value, indicating
+    whether or not the calculation was a success (=1) or not.  You should
+    *always* check this value.  XX maybe we should throw exception instead.
+    
+    See module docstring for reference.
     """
 
     count=0
@@ -168,10 +235,10 @@ def driver(potential, energy_guess, rmin, rmax, npoints, corr_fact,
     success_code=0
     while count < max_iterations:
         count += 1
-        new_energy, psi = update_energy(potential, energies[-1], 
+        new_energy, psi = update_energy(Potential, energies[-1], 
                                         rmin, rmax, npoints)
         if diagnostics:
-            print "Tried energy: ", energies[-1]*corr_fact
+            print "Tried energy: ", energies[-1]
             f=open("diagnostic_wavefunction.dat","w")
             for i,apsi in enumerate(psi):
                 f.write("%f %f\n" % (rmin+i*h,apsi))
@@ -183,9 +250,15 @@ def driver(potential, energy_guess, rmin, rmax, npoints, corr_fact,
             success_code=1
             break
     if success_code==1:
+        # normalize wavefunction:
+        factor=1.0/math.sqrt(h*sum([apsi*apsi for apsi in psi]))
+        normalized_psi=[apsi*factor for apsi in psi]
         return {"success_code":success_code,
                 "energy":energies[-2], # this is energy corresponding to psi
                                        # not the most recent
-                "psi":psi}
+                "psi":normalized_psi,
+                "rmin":rmin,
+                "h":h
+        }
     else:
         return {"success_code":success_code}
