@@ -1,5 +1,5 @@
 """
-The helium dimer is weakly bound and has a single rotational level.
+The helium dimer is weakly bound and has a single vibrational level.
 Calculate its binding energy and compare it to the literature value.
 """
 
@@ -52,7 +52,7 @@ def he2_potential_energy(r):
 
 def calculate_energy():
     reduced_mass_amu=0.5*4.002602
-    he2_Potential=cooley.ScaledPotential(
+    he2_Potential=cooley.Potential(
         he2_potential_energy,
         "nm",
         "K",

@@ -18,7 +18,7 @@ import math
 class Error(Exception):
     pass
 
-class ScaledPotential():
+class Potential():
     """Helper class for generating objects describing potential and units
     for potential in a form that the integration functions of this module
     can use.
@@ -86,7 +86,6 @@ class ScaledPotential():
 class InwardsError(Error):
     pass
 
-
 class EnergyError(Error):
     pass
 
@@ -97,13 +96,15 @@ def integrate(Potential, energy, rstart, rstep, max_points):
     is *not normalized*, and should be normalized by the user as required.
 
     Arguments:
-      Potential: a class with a member function:   ".v(r)" 
+      Potential: an object with a member function:   ".v(r)" 
                  and the attribute:                ".hbar2_div_2m" 
                  The member function ".v(r)" should return the value of
                  the potential energy as a function of internuclear distance.
                  The attribute ".hbar2_div_2m" should return hbar^2/(2m) 
                  using the same energy and distance units that ".v(r)" uses
                  for its return value and argument respectively.
+                 (The class "Potential" in this  module is
+                 a convenient way to make this object from a potential function).
       rstart: starting point for integration 
               (in same distance units as argument of "Potential.v(r)")
       rstep: increment for integration; positive for outgoing integration, 
@@ -241,13 +242,15 @@ def find_single_eigen(Potential,
     directly called by the user.
 
     Arguments:
-      Potential: a class with a member function:   ".v(r)" 
+      Potential: an object with a member function:   ".v(r)" 
                  and the attribute:                ".hbar2_div_2m" 
                  The member function ".v(r)" should return the value of
                  the potential energy as a function of internuclear distance.
                  The attribute ".hbar2_div_2m" should return hbar^2/(2m) 
                  using the same energy and distance units that ".v(r)" uses
                  for its return value and argument respectively.
+                 (The class "Potential" in this  module is
+                 a convenient way to make this object from a potential function).
       energy_guess: initial guess value for energy 
                     (same energy units as the return value of "Potential.v(r)")
       rmin, rmax: integration limits
