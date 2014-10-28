@@ -1,12 +1,9 @@
 """Tests for the Cooley package.
-XX I need to actually add checks that returned results are correct.
 
 To run all tests:
   python test_cooley.py
 To run a specific test from the command-line:
   python test_cooley.py test_he2.test
-
-XX add references for cooley and cashion papers and any other tests.
 """
 
 import unittest
@@ -16,7 +13,10 @@ sys.path.append("..")
 from cooley import *
 
 class morse_potential():
+    """A "Morse" potential."""
     def __init__(self,d,a,re):
+        """Potential parameter names are the same as given in Cooley's paper.
+        """
         self.d=d
         self.re=re
         self.a=a
@@ -24,6 +24,12 @@ class morse_potential():
         return -self.d+self.d*(1-math.exp(-self.a*(r-self.re)))**2
 
 class Test_cashion_compare(unittest.TestCase):
+    """Compare with some results of:
+    J. K. Cashion, J. Chem. Phys. 39, 1872 (1963),
+    http://dx.doi.org/10.1063/1.1734545
+    (It would be better to compare against more results of this paper,
+    especially those involving rotation).
+    """
     def test(self):
         d=605.559
         a=0.988879
@@ -34,81 +40,75 @@ class Test_cashion_compare(unittest.TestCase):
                 self.hbar2_div_2m=1.0
         Potential=test_potential(d,a,re)
 
-        guess=-530.0
+        guess=-580.0
         npoints=1000
         rmax=10.0
         rmin=re-2
+        tolerance=1.0e-9
 
-        results=driver(Potential,
-                       guess,
-                       rmin,
-                       rmax,
-                       npoints,
-                       1.0)
-        # see: Table I of Cashion (XX I should check a few different levels).
-        print "Cashion energy: ", results["energy"]
-
+        results=find_single_eigen(Potential,
+                                  guess,
+                                  rmin,
+                                  rmax,
+                                  npoints,
+                                  tolerance)
+        # see Table I of Cashion:
+        literature_value=-581.46902
+        print
+        print "Calculated v=0 energy: ", results["energy"]
+        print "Cashion's energy (Table I): ", literature_value
+        self.assertAlmostEqual(results["energy"], literature_value, places=4)
 
 class Test_cooley_compare(unittest.TestCase):
-    """Tests from Cooley's paper (Morse potential)."""
+    """Compare with some results of:
+    Cooley,  Mathematics of Computation, v. 15, pg 363 (1961).
+    http://dx.doi.org/10.2307/2003025
+    (It would be better to compare against more results of this paper.)
+    """
     def test(self):
-        kg_per_amu=1.660538921e-27
-        kg_per_atomic_unit=9.10938291e-31
-        reduced_mass_amu=0.5
-        # goofy scaling that Cooley uses:
         class test_potential():
             def __init__(self,d,a,re):
                 self.v=morse_potential(d,a,re).v
                 self.hbar2_div_2m=1.0
-
         # Cooley's Morse parameters:
         d=188.4355
         a=0.711248
         re=1.9975
         Potential=test_potential(d,a,re)
 
-        guess=-110.8
-#        guess=-160.4
+        guess=-180.0
         npoints=200
         rmax=10.0
         rmin=0.000
+        tolerance=1.0e-9
 
-        results=driver(Potential,
-                       guess,
-                       rmin,
-                       rmax,
-                       npoints
-                   )
-        # see: Table 2 of Cooley (XX I should a few different levels, etc...)
-        print results["energy"]
+        results=find_single_eigen(Potential,
+                                  guess,
+                                  rmin,
+                                  rmax,
+                                  npoints,
+                                  tolerance
+                              )
+        # see Table 2 of Cooley:
+        literature_value=-178.79857
+        print
+        print "Calculated v=0 energy: ", results["energy"]
+        print "Cooley's energy (Table I): ", literature_value
+        self.assertAlmostEqual(results["energy"], literature_value, places=4)
 
 class test_he2(unittest.TestCase):
+    """Check Helium dimer binding energy."""
     def test(self):
-        root=os.path.expanduser("~")
-        # should define he2 potential here.
-        sys.path.append(root+"/2014/fall2014/calculations/"
-                        "he2_potential_energy/20140927/")
-        import he2_potential_energy
-        reduced_mass_amu=0.5*4.002602
-        test_scaled_potential=ScaledPotential(
-            he2_potential_energy.he2_potential_energy,
-            "nm",
-            "K",
-            reduced_mass_amu,
-            "AMU",
-            0)                                   
-        guess=-0.001
-        npoints=10000
-        rmax=100.0
-        rmin=0.01
+        import helium_dimer_example # see this module for documentation.
+        energy=helium_dimer_example.calculate_energy()
+        # compare against value in Table I of Janzen and Aziz, 
+        # J. Chem. Phys. v. 103, pg 9626 (1995) 
+        # http://dx.doi.org/10.1063/1.469978
+        literature_value=-1.594e-3
+        print
+        print "He2 energy (K): ", energy
+        print "compared to literature value (K): ", literature_value
+        self.assertAlmostEqual(energy, literature_value, places=6)
 
-        results=driver(test_scaled_potential,
-                       guess,
-                       rmin,
-                       rmax,
-                       npoints
-                   )
-        print "He2 binding energy: ", results["energy"]
-    
 if __name__ == "__main__":
     unittest.main()

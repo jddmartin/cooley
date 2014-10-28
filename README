@@ -1,0 +1,12 @@
+A Python implementation of the Cooley technique for solving for the 
+vibrational energy levels and wavefunctions of a diatomic molecule.
+
+For a description of the techniques see:
+J. K. Cashion, J. Chem. Phys. 39, 1872 (1963),
+http://dx.doi.org/10.1063/1.1734545 (and references within).
+
+For examples and tests see the "examples_and_tests" subdirectory.
+
+This is written for readability and simplicity, not efficiency.
+
+Written by J. Martin, Fall 2014, GPLv3.

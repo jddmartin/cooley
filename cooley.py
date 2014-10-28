@@ -14,6 +14,10 @@ Written by J. Martin, Fall 2014, GPLv3.
 
 import math
 
+# base class of exceptions for module:
+class Error(Exception):
+    pass
+
 class ScaledPotential():
     """Helper class for generating objects describing potential and units
     for potential in a form that the integration functions of this module
@@ -79,6 +83,13 @@ class ScaledPotential():
             return (val
                     +self.hbar2_div_2m*self.j*(self.j+1.0)/r**2)
 
+class InwardsError(Error):
+    pass
+
+
+class EnergyError(Error):
+    pass
+
 def integrate(Potential, energy, rstart, rstep, max_points):
     """Perform either an ingoing or outgoing integration (depending
     on sign of "rstep") of the 1d Schrodinger equation using Numerov's
@@ -107,7 +118,7 @@ def integrate(Potential, energy, rstart, rstep, max_points):
     Notes:
     This function can be used to: 
     1) compute continuum wavefunctions (in which case it will be called once)
-    or 
+     or 
     2) used as part of an iterative procedure to compute a bound state
        energy eigenvalue.  In this case it will be called twice for
        each trial energy: once for an inwards integration and once 
@@ -127,11 +138,16 @@ def integrate(Potential, energy, rstart, rstep, max_points):
     if rstep < 0: 
         # start inwards integration based on WKB (A3 of Cashion):
         psi=[1.0e-6,]
-        psi.append(psi[0]
-                   /math.exp(rnext*math.sqrt(Potential.v(rnext)-energy)
-                             /hbar2_div_2m-
-                             rcurrent*math.sqrt(Potential.v(rcurrent)-energy)
-                             /hbar2_div_2m))
+        try:
+            psi.append(psi[0]
+                       /math.exp(rnext*math.sqrt(Potential.v(rnext)-energy)
+                                 /hbar2_div_2m-
+                                 rcurrent*math.sqrt(Potential.v(rcurrent)-energy)
+                                 /hbar2_div_2m))
+        except ValueError as e:
+            message=("Energy exceeds Potential.v(rnext) "
+                     "or Potential.v(rcurrent): %17g" % energy)
+            raise EnergyError(message)
     else:
         # start outwards integration as recommended by Cashion:
         psi=[0,1.0e-6]
@@ -149,10 +165,12 @@ def integrate(Potential, energy, rstart, rstep, max_points):
         if rstep < 0.0: # inwards integration
             if ynew < ycurrent: # inwards integration stopping criteria
                 break
-                # XX this may never be satisfied if energy is too low
-                # maybe check number of points.
         if abs(psi[-1]) > 1.0e6: # rescale to prevent overflow:
             rescale(psi, abs(psi[-1]))
+    else: # we have iterated to end:
+        if rstep < 0.0: # inwards integration stopping criteria *not met*:
+            # energy is possibly too low.
+            raise InwardsError("Inwards integration stopping criteria not met.")
     return psi
 
 def rescale(psi, factor):
@@ -165,8 +183,8 @@ def update_energy(Potential, energy, rmin, rmax, npoints):
     This function will normally not be called directly by the user.
 
     For a description of arguments see "integrate".  Returns the updated
-    energy (in energy units of "Potential.v(r)").
-
+    energy (in energy units of "Potential.v(r)") and wavefunction.
+    
     See module docstring for reference.
     """
 
@@ -208,23 +226,47 @@ def update_energy(Potential, energy, rmin, rmax, npoints):
     new_energy=energy+energy_correction
     return new_energy, psi
 
-def driver(Potential, 
-           energy_guess, 
-           rmin, rmax, npoints, 
-           tolerance=1.0e-9,
-           max_iterations=100,
-           diagnostics=False):
-    """Iterative procedure to find energy eigenvalue.
-    For many cases this will be the only function directly called by
-    the user.
+        
+class MaxIterationsError(Error):
+    pass
+
+def find_single_eigen(Potential, 
+                      energy_guess, 
+                      rmin, rmax, npoints, 
+                      tolerance,
+                      max_iterations=100,
+                      diagnostics=False):
+    """Iterative procedure to find a single energy eigenvalue and wavefunction,
+    using Cooley's procedure.  For many cases this will be the only function 
+    directly called by the user.
 
     Arguments:
-
+      Potential: a class with a member function:   ".v(r)" 
+                 and the attribute:                ".hbar2_div_2m" 
+                 The member function ".v(r)" should return the value of
+                 the potential energy as a function of internuclear distance.
+                 The attribute ".hbar2_div_2m" should return hbar^2/(2m) 
+                 using the same energy and distance units that ".v(r)" uses
+                 for its return value and argument respectively.
+      energy_guess: initial guess value for energy 
+                    (same energy units as the return value of "Potential.v(r)")
+      rmin, rmax: integration limits
+                  (same distance units as argument of "Potential.v(r)").
+      npoints: number of integration points 
+               i.e. grid spacing will be: dr=(rmax-rmin)/(npoints-1.0)
+      tolerance: the energy eigenvalue is considered found when two
+                 consecutive updates give an absolute change in energy
+                 less than tolerance.
+                 (same energy units as the return value of "Potential.v(r)")
+      max_iterations: maximum number of times to obtain an update of
+                      the energy.
+      diagnostics: whether or not diagnostics information should
+                   be obtained.
     Returns:
-    A dictionary with various results of the calculation indexed by keys.
-    The most important corresponds is the "success_code" value, indicating
-    whether or not the calculation was a success (=1) or not.  You should
-    *always* check this value.  XX maybe we should throw exception instead.
+      A dictionary with various results of the calculation indexed by keys.
+      The most important corresponds is the "success_code" value, indicating
+      whether or not the calculation was a success (=1) or not.  You should
+      *always* check this value.  
     
     See module docstring for reference.
     """
@@ -235,10 +277,11 @@ def driver(Potential,
     success_code=0
     while count < max_iterations:
         count += 1
+        if diagnostics:
+            print "Trying energy: ", energies[-1]
         new_energy, psi = update_energy(Potential, energies[-1], 
                                         rmin, rmax, npoints)
         if diagnostics:
-            print "Tried energy: ", energies[-1]
             f=open("diagnostic_wavefunction.dat","w")
             for i,apsi in enumerate(psi):
                 f.write("%f %f\n" % (rmin+i*h,apsi))
@@ -249,16 +292,14 @@ def driver(Potential,
             ((abs(energies[-2]-energies[-3]) <= tolerance))):
             success_code=1
             break
-    if success_code==1:
-        # normalize wavefunction:
-        factor=1.0/math.sqrt(h*sum([apsi*apsi for apsi in psi]))
-        normalized_psi=[apsi*factor for apsi in psi]
-        return {"success_code":success_code,
-                "energy":energies[-2], # this is energy corresponding to psi
-                                       # not the most recent
-                "psi":normalized_psi,
-                "rmin":rmin,
-                "h":h
-        }
-    else:
-        return {"success_code":success_code}
+    else: # "max_iterations" reached without success:
+        message=("Maximum iterations exceeded: %d" % max_iterations)
+        raise MaxIterationsError(message)
+    # normalize wavefunction:
+    factor=1.0/math.sqrt(h*sum([apsi*apsi for apsi in psi]))
+    normalized_psi=[apsi*factor for apsi in psi]
+    return {"energy":energies[-2], # this is energy corresponding to psi
+            # not the most recent
+            "psi":normalized_psi,
+            "rmin":rmin,
+            "h":h}
