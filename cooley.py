@@ -25,10 +25,10 @@ class Potential():
 
     The integration functions of this module take an object with the
     member function ".v(r)" and attribute ".hbar2_div_2m".  Given
-    a potential function accepting distance and return energy in user 
+    a potential function accepting distance and returning energy in user 
     specified units, together with the reduced mass of the system, 
-    this class allows easy generation of the required object, including
-    the possibility of rotation.  
+    this class allows easy generation of the required object.  A centrifugal
+    contribution to the potential may also be added.
     """
 
     def __init__(self, potential_function, 
@@ -53,6 +53,7 @@ class Potential():
                                       "AMU" (atomic mass units).
         """
         energy_units_in_joules={"eV":1.602176565e-19,
+                                "meV":1.602176565e-22,
                                 "cm^{-1}":1.986445685e-23,    
                                 "K":1.3806488e-23,            
                                 "AU": 4.35974434e-18,
@@ -66,6 +67,10 @@ class Potential():
                                  "kg":1.0,}   
         hbar=1.054571726e-34 # J s
         
+        # define hbar^2/(2m) in the units of user_energy*user_length^2, where
+        # user_energy is the energy unit for the returned value of the 
+        # potential function, and user_length is the unit for the argument of the
+        # potential function:
         self.hbar2_div_2m=(
             hbar**2/(mass_units_in_kilograms[reduced_mass_units]
                      *reduced_mass)/2.0
