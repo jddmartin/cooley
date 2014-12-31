@@ -94,7 +94,8 @@ class InwardsError(Error):
 class EnergyError(Error):
     pass
 
-def integrate(Potential, energy, rstart, rstep, max_points):
+def integrate(Potential, energy, rstart, rstep, max_points, 
+              start_linear_from_origin=False):
     """Perform either an ingoing or outgoing integration (depending
     on sign of "rstep") of the 1d Schrodinger equation using Numerov's
     method (as described by Cashion).  The wavefunction returned
@@ -157,6 +158,12 @@ def integrate(Potential, energy, rstart, rstep, max_points):
     else:
         # start outwards integration as recommended by Cashion:
         psi=[0,1.0e-6]
+
+        if start_linear_from_origin is True:
+            # this option is possibly useful when looking at s-wave
+            # states in Coulomb potential.  This was introduced to
+            # help solve e^- - H scattering length problem.
+            psi=[1.0e-6, 1.0e-6*(rstart+rstep)/rstart]
 
     for i in range(2,max_points):
         rprev=rcurrent
