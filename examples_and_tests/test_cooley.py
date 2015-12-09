@@ -110,5 +110,28 @@ class test_he2(unittest.TestCase):
         print "compared to literature value (K): ", literature_value
         self.assertAlmostEqual(energy, literature_value, places=6)
 
+class test_show(unittest.TestCase):
+    """Check SHO ground state energy"""
+    def test(self):
+        class SHOPotential():
+            hbar2_div_2m = 0.5
+            def v(self, r):
+                return 0.5*r*r
+
+        guess = 0.5
+        rmin = -10.0
+        rmax = 10.0
+        npoints = 1000
+        tolerance = 1.0e-6
+        results=find_single_eigen(SHOPotential(),
+                                  guess,
+                                  rmin,
+                                  rmax,
+                                  npoints,
+                                  tolerance,
+                                  diagnostics = True
+                              )
+        print results["energy"]
+
 if __name__ == "__main__":
     unittest.main()

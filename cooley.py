@@ -303,8 +303,9 @@ def find_single_eigen(Potential,
             f.close()
 
         energies.append(new_energy)
-        if ((abs(energies[-1]-energies[-2]) <= tolerance) and
-            ((abs(energies[-2]-energies[-3]) <= tolerance))):
+        if ((count >= 3) and
+            (abs(energies[-1]-energies[-2]) <= tolerance) and
+            (abs(energies[-2]-energies[-3]) <= tolerance)):
             success_code=1
             break
     else: # "max_iterations" reached without success:
