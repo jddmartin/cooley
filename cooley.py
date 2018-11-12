@@ -298,9 +298,9 @@ def find_single_eigen(Potential,
                    be obtained.
     Returns:
       A dictionary with various results of the calculation indexed by keys.
-      The most important corresponds is the "success_code" value, indicating
-      whether or not the calculation was a success (=1) or not.  You should
-      *always* check this value.
+
+    Raises:
+      MaxIterationsError: convergence not reached before max_iterations
 
     See module docstring for reference.
     """
@@ -308,7 +308,6 @@ def find_single_eigen(Potential,
     count = 0
     energies = [energy_guess, ]
     h = (rmax - rmin) / (npoints - 1)
-    success_code = 0
     while count < max_iterations:
         count += 1
         if diagnostics:
@@ -325,8 +324,7 @@ def find_single_eigen(Potential,
         if ((count >= 3) and
             (abs(energies[-1] - energies[-2]) <= tolerance) and
                 (abs(energies[-2] - energies[-3]) <= tolerance)):
-            success_code = 1
-            break
+            break  # energy converged
     else:  # "max_iterations" reached without success:
         message = ("Maximum iterations exceeded: %d" % max_iterations)
         raise MaxIterationsError(message)
