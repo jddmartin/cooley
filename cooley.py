@@ -151,13 +151,16 @@ def integrate(Potential, energy, rstart, rstep, max_points,
         # start inwards integration based on WKB (A3 of Cashion):
         psi = [1.0e-6, ]
         try:
-            psi.append(psi[0] /
-                       math.exp(rnext *
-                                math.sqrt(Potential.v(rnext) - energy) /
-                                hbar2_div_2m -
-                                rcurrent *
-                                math.sqrt(Potential.v(rcurrent) - energy) /
-                                hbar2_div_2m))
+            psi.append(
+                psi[0] /
+                math.exp(rnext *
+                         math.sqrt((Potential.v(rnext) - energy) /
+                                   hbar2_div_2m) -
+                         rcurrent *
+                         math.sqrt((Potential.v(rcurrent) - energy) /
+                                   hbar2_div_2m)
+                       )
+                )
         except ValueError as e:
             message = ("Energy exceeds Potential.v(rnext) "
                        "or Potential.v(rcurrent): %17g" % energy)
